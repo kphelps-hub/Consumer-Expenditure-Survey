@@ -1,0 +1,352 @@
+---
+title: "Consumer Expenditure Analysis"
+author: "Kaile Phelps"
+date: "2023-10-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Consumer Expenditure Survey Analysis
+
+The purpose of this analysis is to investigate trends and changes in consumer spending for different age demographics during and after the COVID pandemic lockdowns. The data has been taken from the Bureau of Labor Statistics' (BLS) [Consumer Expenditure Survey](https://www.bls.gov/cex/).
+
+
+#Data Collection
+
+I have collected the data using the recommended API from the [BLS website](https://www.bls.gov/developers/). I have stored the code related to pulling and wrangling the data into a csv in git-hub. (ADD LINK)
+
+Now, there is far more information that is tracked in the Customer Expenditure Survey than I could possibly breakdown and analyze, so for the purpose of this project I just wanted to keep it high level and look at the primary 14 categories of spending and broken down by age ranges. To generate more precise analysis would require delving further into some of the breakdowns of the survey. 
+
+#Loading and Cleaning the Data
+
+To begin the analysis, we will first need to load the necessary packages. This analysis will primarily be using the tidyverse, ggplot2, and reshape2 packages. 
+
+```{r warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(reshape2)
+```
+
+We will then go ahead and read in the csv and add descriptions to the characterstic code and item codes from the data. To validate that the columns have been created successfully I went ahead and printed the first few lines of the data frame with the columns that we added. The values can be confirmed based on the glossary of the customer expenditure survey. 
+
+```{r}
+data <- read.csv("2023_Consumer_Exp_Data.csv")
+chr_code = 1:9
+chr_code_desc = c("All Consumer Units",
+                  "Reference person under age 25",
+                  "Reference person from age 25 to 34",
+                  "Reference person from age 35 to 44",
+                  "Reference person from age 45 to 54",
+                  "Reference person from age 55 to 64",
+                  "Reference person from age 65 or over",
+                  "Reference person from age 65 to 74",
+                  "Reference person from age 75 or over")
+chr_code_mapping <- data.frame(chr_code,chr_code_desc)
+
+item_code = c("ALCBEVG",
+                  "APPAREL",
+                  "CASHCONT",
+                  "EDUCATN",
+                  "ENTRTAIN",
+                  "FOODTOTL",
+                  "HEALTH",
+                  "HOUSING",
+                  "INSPENSN",
+                  "MISC",
+                  "PERSCARE",
+                  "READING",
+                  "TOBACCO",
+                  "TOTALEXP",
+                  "TRANS")
+item_code_desc = c("Alcoholic beverages",
+                    "Apparel and services",
+                    "Cash contributions",
+                    "Education",
+                    "Entertainment",
+                    "Food",
+                    "Healthcare",
+                    "Housing",
+                    "Personal insurance and pensions",
+                    "Miscellaneous expenditures",
+                    "Personal care products and services",
+                    "Reading",
+                    "Tobacco products and smoking supplies",
+                    "Total average annual expenditures",
+                    "Transportation")
+item_code_mapping <- data.frame(item_code,item_code_desc)
+
+data <- data %>%
+  left_join(chr_code_mapping, by = 'chr_code') %>%
+  left_join(item_code_mapping, by = 'item_code')
+
+head(data[,c("chr_code","chr_code_desc","item_code","item_code_desc")])
+```
+
+Before going any further, we should validate the structure of the data is correct.
+
+```{r}
+str(data)
+```
+We can get an overview of the type of data that we have available. We have breakdowns by year, spending category (item_code), and age group (chr_code). For each of these there is a "value" column representing the amount that was spent for that particular breakdown. We can also that the "value" field is a "chr" type rather than an "int". So we will need to change the data type of the column.
+
+
+getting into the mapping, we need to change the class of the columns. This does create some NA's for Cash contributions and Reading for 2022, which are going to be limitations on the analysis. 
+```{r}
+data$value <- as.integer(data$value)
+```
+When doing so, there is a warning saying that NAs were introduced. Reviewing the footnotes for these particular lines show that the data is not within the necessary margin of error for the survey, so NAs are appropriate.
+```{r}
+data %>%
+  filter(is.na(value)) %>%
+  select(year,chr_code_desc,item_code_desc,footnote_text)
+```
+Finally, we are going to drop some columns that are not related to the analysis such as footnote, period and latest.
+
+```{r}
+data <- data %>%
+  select(-c(period,
+            periodName,
+            footnote_code,
+            footnote_text,
+            latest))
+```
+
+With that our dataset is ready to be used for our analysis. 
+
+#Data Analysis
+
+##Total Consumer Spending
+
+The first piece that I want to look at is just how total spending has changed over time as that will give context when looking at how spending has changed in specific categories. 
+
+```{r}
+ggplot(data = data %>%
+         filter(chr_code == 1,
+                item_code == 'TOTALEXP'))+
+  geom_col(mapping = aes(x=year,
+                         y = value))+
+  labs(title = "Total Consumer Unit Expenditure",
+       y = "Expenditures",
+       x = "Year")+
+  scale_y_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ","))
+```
+The first piece that stands out is that dip in 2020 during the most sever part of the lockdown. Since we are analyzing trends in spending, it is worth creating a new column for the percent change year to year. We will go ahead and create this below. To validate the results and to see the percent changes I will print the results below.
+
+```{r}
+#need to create % growth field
+data <- data %>%
+  group_by(series_id) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate (pct_change = (value-lag(value))/lag(value)*100,
+          amount_change = value-lag(value)) %>%
+  ungroup()
+
+data %>%
+  filter(chr_code==1,
+         item_code == 'TOTALEXP') %>%
+  select(year,
+         value,
+         pct_change)
+```
+
+Looking at the data in the table we can see the only negative year is in 2020 and it is immediately followed up by 2 years of the strongest growth. Just looking at this table does not give enough information to deduce whether there is new growth in spending beyond what we would have expected pre-pandemic or if the recent years of growth are just a "catch-up" to our previous trajectory. To investigate this further, I will create a log-linear model based on the years leading up to 2020. 
+
+```{r}
+#filter data to just pre-pandemic for total spending
+pre_pandemic_data <- data %>%
+  filter(chr_code == 1,
+         item_code == 'TOTALEXP',
+         year < 2020)
+
+#create linear regression model based on log(value) ~ year
+model <- lm(log(value) ~ year,
+            data = pre_pandemic_data)
+
+#data frame to store projections
+projection <- data.frame(
+  year = 2020:2022
+  )
+projection$projected_value <- exp(predict(model, newdata = projection))
+
+#data frame for new plot. Joining projection with actual data,
+#then using the melt function to switch to long data to create column chart
+projection_plot_data <- data %>%
+  filter(chr_code ==1,
+         item_code == 'TOTALEXP') %>%
+  select(year,
+         value) %>%
+  left_join(projection, by = "year") %>%
+  rename(Actual = value,
+         Projected = projected_value) %>%
+  melt(id.vars = 'year')
+
+ggplot(data = projection_plot_data)+
+         geom_col(mapping = aes(x = year,
+                           y = value,
+                           fill = variable),
+                  position = position_dodge2())+
+    labs(title = "Total Consumer Unit Expenditure",
+       y = "Expenditures",
+       x = "Year",
+       fill = "")+
+  scale_y_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ","))
+    
+```
+From this chart, we can clearly see the dip in spending versus the projection in 2020, but by 2021 spending had essentially caught back up to the projection and 2022 had surpassed it. Based on this, there does not appear to be evidence of a trend of limited spending, if anything, this is evidence of the opposite that coming out of the pandemic people are increasing their spending more quickly than before. Whether or not this continues into 2023 and beyond will be interesting to see. As of right now 2022 could be an outlier and we are course correcting back on track or there may be a more rapid rate of growth in spending. 
+
+##Spending By Category
+The next area that I am going to be analyzing is spending by category to see which categories of spending were more susceptible to change during the pandemic than others. To begin, we can look at a graph of the 14 categories
+
+```{r}
+ggplot(data = data %>%
+         filter(chr_code==1,
+                item_code!='TOTALEXP'))+
+  geom_col(mapping = aes(x = year,
+                         y = value))+
+  facet_wrap(~item_code_desc, scales = "free")+
+  theme(axis.text.x = element_text(angle = 45))+
+  labs(title = "Spending by Category",
+       x = "Year",
+       y = "Expenditures")+
+  scale_y_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ","))
+
+```
+
+We can see clearly from the above graphs that for most categories, we have a decent decrease in spending in 2020 during the year with the heaviest lock down measures and a subsequent strong increase in the last two years. Housing, Healthcare, and Personal Insurance seem to be the high dollar number outliers when it comes to this trend and that makes sense since those categories we would expect to be more inelastic than the Transportation or Food cateogries. To see which categories suffered the largest setback in 2020, I will take a look at just the percent changes from that year. 
+
+```{r}
+#now let's create a chart just looking at 2020
+data %>%
+  filter(year == '2020',
+         chr_code %in% c(1)) %>%
+  ggplot()+
+  geom_col(mapping = aes(x = item_code_desc,
+                         y = pct_change))+
+  facet_wrap(~chr_code_desc)+
+  theme(axis.text.x = element_text(angle = 45))+
+  labs(title = "Percent Change in Spending in 2020",
+        y = "Percent Change")
+```
+This confirms the trends mentioned above with the Housing and Healthcare and Personal Insurance all increasing or staying about the same while spending in about half of the categories decreased substantially. If we were to remove those 3 categories and really focus on the more "discretionary" spending then we can get a better sense of how consumer's actively changed their purchasing habits in 2020.
+
+```{r}
+disc_spending <- data %>%
+  filter(!item_code %in% c("HEALTH",
+                           "HOUSING",
+                           "INSPENSN",
+                           "TOTALEXP"),
+         chr_code == 1) %>%
+  group_by(year,chr_code,chr_code_desc) %>%
+  summarise(value = sum(value), .groups = "keep") %>%
+  ungroup() %>%
+  group_by(chr_code,chr_code_desc) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(pct_change = (value-lag(value))/lag(value)*100,
+         item_code_desc = 'Discretionary Spending')
+
+total_spending <- data %>%
+  filter(chr_code == 1,
+         item_code == 'TOTALEXP') %>%
+  select(year,
+         chr_code,
+         chr_code_desc,
+         value,
+         pct_change,
+         item_code_desc) %>%
+  rbind(disc_spending) %>%
+  filter(year > 2015)
+
+ggplot(total_spending)+
+  geom_line(mapping = aes(x = year,
+                         y = pct_change,
+                         color = item_code_desc))+
+  labs(title = "Discretionary Spending vs Total Spending",
+       y = "Percent Change",
+       x = "Year",
+       color = "")
+
+```
+Looking at just the discretionary spending shows that consumers spent about 8% less in these categories despite just an overall drop of less than 3% in total spending. We can also see that the discretionary spending increased more thantotal spending in 2021 and 2022, though it is much more closely aligned with overall spending in 2022. This does seem to indicate that some amount of the increase in spending in 2022 is likely due to increased costs of living or inflation. 
+
+#Transportation by Age
+
+In this next section I wanted to look specifically into trends within the field of transportation. Given major restrictions on travel due to the pandemic, but also an increase in the amount of remote work flexibility, this seemed like an area that would have some interesting trends. First, I just wanted to look at a quick breakdown across the age groups spending on transportation. 
+```{r}
+data %>%
+  filter(item_code == 'TRANS',
+         !chr_code %in% c(8,9)) %>%
+  ggplot()+
+  geom_col(mapping = aes(x = year,
+                         y = value))+
+  facet_wrap(~chr_code_desc)+
+  labs(title = "Transportation Expenditure by Age Range",
+        y = "Transportation Expenditures",
+       x = "Year")+
+  scale_y_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ","))
+```
+Again, we see the very familiar dip in 2020 across almost all of the ages followed by strong growths in 2021 and 2022. However, what is very interesting is that there is no discernible decrease in transportation spending in the 25-34 year old households. Unsurprisingly, the growth is also relatively smaller compared to the other age categories in the following years. To break this down further, we can look specifically into the spending increases and decreases.
+
+```{r}
+data %>%
+  filter(!chr_code %in% c(8,9),
+         item_code == 'TRANS',
+         year >2019) %>%
+  ggplot()+
+  geom_col(mapping = aes(x = as.factor(chr_code),
+                         y = amount_change,
+                         fill = as.factor(chr_code)))+
+  facet_wrap(~year)+
+  scale_x_discrete(labels = c("1" = "All",
+                              "2" = "Under 25",
+                              "3" = "25 to 34",
+                              "4" = "35 to 44",
+                              "5" = "45 to 54",
+                              "6" = "55 to 64",
+                              "7" = "65 or over"))+
+  theme(axis.text.x = element_text(angle = 45),
+        legend.position = "none")+
+  labs(title = "Change in Transportation Spending",
+        y = "Net Change in Spending",
+        x = "Reference Person's Age")+
+  scale_y_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ","))
+  
+```
+From this graph we can see that transportation spending went significantly down for all age groups except 25 to 34 year olds in 2019 and then increased across the board in the following years for all age groups. Interestingly, there also seems to be a slight lag where the older age groups increased spending more in 2022 than 2021 and the younger age groups saw greater increase in 2021.
+
+
+##The final thing to look at
+
+Finally, perhaps the most imporant thing to look as is if there is significant change in people's expenditures overall. Rather than looking at the total amount increase or descrease, I wanted to see if people's consumption patterns were shifting signficantly. To do that, I took the year over year difference in spending per category and summed up the absolute values. This provided me with a measure of changes in spending over time. 
+
+```{r}
+data <- data %>%
+  group_by(series_id) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(abs_change = abs(value-lag(value)))
+
+grouped_data <- data %>%
+  filter(!chr_code %in% c('1','8','9'),
+         item_code != 'TOTALEXP') %>%
+  group_by(year,chr_code,chr_code_desc) %>%
+  summarize(abs_change_sum = sum(abs_change),
+            abs_change_sum_pct = sum(abs_change)/sum(value),
+            .groups = "keep") %>%
+  arrange(desc(year),desc(abs_change_sum_pct))
+
+ggplot(grouped_data,
+       aes(x = year,
+           y = abs_change_sum_pct,
+           color = chr_code_desc))+
+  geom_line(size = 1)
+
+ggplot(grouped_data,
+       aes(x = year,
+           y = abs_change_sum,
+           color = chr_code_desc))+
+  geom_line(size = 1)
+
+```
+From this chart, we can see that in 2021 and 2022, there seem to be significant changes in spending as compared to the pre-pandemic years (2016 to 2019). 
