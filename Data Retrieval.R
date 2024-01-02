@@ -1,4 +1,5 @@
-#pulling all the data that I want
+#Script to pull data from Bureau of Labor statistics Consumer Expenditure Survey
+#For more information see https://www.bls.gov/developers/home.htm
 
 #load necessary packages
 library(devtools)
@@ -7,13 +8,13 @@ library(jsonlite)
 library(httr)
 library(tidyverse)
 
-
 #data to pass into request
 api_key <- ""
 url <- "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 
-#need to pass in the series ID's. In this case I want
-#the breakdown by age and itme_code
+#all data is stored in series ID's over time. I will generate series ID's
+#to pass into the API. For the purpose of this study, I want to breakdown by
+#age and item_code
 
 #consumer expenditure survey
 survey_code <- "CX"
@@ -57,7 +58,7 @@ colnames(series_id_df) <- c("series_id",
                             "item_code",
                             "chr_code")
 
-#storing all the data in this data frame
+#creating df to store response data
 df <- data.frame()
 
 #can only send a request of 25 series at a time
