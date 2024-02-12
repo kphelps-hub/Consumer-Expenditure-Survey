@@ -4,6 +4,7 @@ author: "Kaile Phelps"
 date: "2023-10-06"
 output:
   html_document:
+    
     fig_path: "images/"
     toc: true
     toc_float: true
@@ -13,16 +14,16 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Consumer Expenditure Survey Analysis
+# Project Description
 
-The purpose of this analysis is to investigate trends and changes in consumer spending for different age demographics during and after the COVID pandemic lockdowns. The data has been taken from the Bureau of Labor Statistics' (BLS) [Consumer Expenditure Survey](https://www.bls.gov/cex/).
+The purpose of this analysis is to investigate trends and changes in consumer spending for different age demographics during and after the COVID-19 pandemic lockdowns. The data has been taken from the Bureau of Labor Statistics' (BLS) [Consumer Expenditure Survey](https://www.bls.gov/cex/).
 
 
 ## Data Collection
 
-I have collected the data using the recommended API from the [BLS website](https://www.bls.gov/developers/). I have stored the code related to pulling and wrangling the data into a csv in this [repository](https://github.com/kphelps-hub/Consumer-Expenditure-Survey/blob/main/Data%20Retrieval.R).
+I collected the data using the recommended API from the [BLS website](https://www.bls.gov/developers/). I stored the code related to pulling and wrangling the data into a .csv in this [repository](https://github.com/kphelps-hub/Consumer-Expenditure-Survey/blob/main/Data%20Retrieval.R).
 
-There is far more information that is tracked in the Customer Expenditure Survey than I could possibly breakdown and analyze, so for the purpose of this project I wanted to keep it high level and look at the primary 14 categories of spending and broken down by age ranges. To generate more precise analysis would require delving further into some of the breakdowns of the survey. 
+The Customer Expenditure Survey tracks far more information than I could possibly breakdown and analyze, so for the purpose of this project, I kept it high level and looked at the primary 14 categories of spending, broken down by age ranges. A more precise analysis would require delving further into some of the other breakdowns provided by the survey. 
 
 ## Loading and Cleaning the Data
 
@@ -34,7 +35,7 @@ library(ggplot2)
 library(reshape2)
 ```
 
-We will then go ahead and read in the csv and add descriptions to the characterstic code and item codes from the data. To validate that the columns have been created successfully I printed the first few lines of the data frame with the columns that we added. The values can be confirmed based on the glossary of the customer expenditure survey. 
+We will then read in the .csv and add columns that describe the characteristic codes (the age groups) and item codes (the spending categories) in the data. To validate  the added columns, I printed the first few lines of the data frame. The values can be confirmed based on the glossary of the customer expenditure survey. 
 
 ```{r}
 #Read data
@@ -108,12 +109,12 @@ data <- data %>%
 head(data[,c("chr_code","chr_code_desc","item_code","item_code_desc","item_code_short_desc")])
 ```
 
-Before going any further, we should validate the structure of the data is correct.
+Before going any further, we should validate that the structure of the data is correct.
 
 ```{r}
 str(data)
 ```
-This gives us an overview of the type of data that we have available. We have breakdowns by year, spending category (item_code), and age group (chr_code). For each of these there is a "value" column representing the amount that was spent for that particular breakdown. We can also see that the "value" field is a "chr" type rather than an "int". So we will need to change the data type of the column.
+This gives us an overview of the type of data that we have available. We have breakdowns by year, spending category (item_code), and age group (chr_code). For each of these there is a "value" column representing the amount that was spent for that particular breakdown. We can also see that the "value" field is a "chr" type rather than an "int". So, we will need to change the data type of the value column.
 
 ```{r}
 data$value <- as.integer(data$value)
@@ -124,7 +125,7 @@ data %>%
   filter(is.na(value)) %>%
   select(year,chr_code_desc,item_code_desc,footnote_text)
 ```
-Finally, we are going to drop some columns that are not related to the analysis such as footnote, period and latest.
+Finally, we are going to drop some columns that are not related to the analysis, such as footnote, period, and latest.
 
 ```{r}
 #remove columns
@@ -136,13 +137,13 @@ data <- data %>%
             latest))
 ```
 
-With that our dataset is ready to be used for our analysis. 
+With that, our dataset is ready to be used for our analysis. 
 
 ## Data Analysis
 
 ### Total Consumer Spending
 
-The first piece that I want to look at is just how total spending has changed over time as that will give context when looking at how spending has changed within specific categories. 
+The first piece that I want to isolate is how total spending has changed over time, as that will give context when looking at how spending has changed within specific categories. 
 
 ```{r}
 #Total Spending Plot
@@ -160,7 +161,7 @@ spending_plot <- ggplot(data = data %>%
 print(spending_plot)
 ```
 
-The first piece that stands out is that dip in 2020 during the most severe part of the lockdown. Since we are analyzing trends in spending, it is worth creating a new column for the percent change year to year. We will go ahead and create this below. To validate the results and to see the percent changes I will print the results below.
+The first piece that stands out is the dip in 2020 during the most severe part of the lockdown. Since we are analyzing trends in spending, it is worth creating a new column for the percent change from year to year. We will create this below. To validate the results and to see the percent changes, I will print the results below.
 
 ```{r}
 #create % growth field
@@ -180,7 +181,7 @@ data %>%
          pct_change)
 ```
 
-Looking at the data in the table we can see the only negative year is in 2020 and it is immediately followed up by 2 years of the strongest growth. Just looking at this table does not give enough information to deduce whether there is new growth in spending beyond what we would have expected pre-pandemic or if the recent years of growth are just a "catch-up" to our previous trajectory. To investigate this further, I will create a log-linear model based on the years leading up to 2020. 
+Looking at the data in the table we can see the only negative year is in 2020, and it is immediately followed up by 2 years of the strongest growth. Simply looking at this table does not give enough information to deduce whether there is new growth in spending beyond what we would have expected pre-pandemic, or if the recent years of growth are just a "catch-up" to our previous trajectory. To investigate this further, I will create a log-linear model based on the years leading up to 2020. 
 
 ```{r warning = FALSE}
 #suppress chunk warning because first 5 years of the projection are NA
@@ -228,11 +229,11 @@ print(projected_spending)
     
 ```
 
-From this chart, we can clearly see the dip in spending versus the projection in 2020, but by 2021 spending had essentially caught back up to the projection and 2022 had surpassed it. Based on this, there does not appear to be evidence of a trend of limited spending, if anything, this is evidence of the opposite. Coming out of the pandemic people are increasing their spending more quickly than before. Whether or not this continues into 2023 and beyond will be interesting to see. As of right now 2022 could be an outlier and we are course correcting back on track or there may be a more rapid rate of growth in spending. 
+From this chart, we can clearly see the dip in spending versus the projection in 2020, but by 2021, spending had essentially caught back up to the projection and 2022 had surpassed it. Based on this, there does not appear to be evidence of a trend of limited spending; if anything, this is evidence of the opposite. Coming out of the pandemic, people are increasing their spending more quickly than before. Whether or not this continues into 2023 and beyond will be interesting to see. As of right now, 2022 could be an outlier, resulting from course correcting back on track, or there may be a more rapid rate of growth in spending. 
 
 ### Spending By Category
 
-The next area that I am going to be analyzing is spending by category to see which categories of spending were more susceptible to change during the pandemic than others. To begin, we can look at a graph of the 14 categories
+The next area that I will analyze is spending by category to see which categories of spending were more susceptible to change during the pandemic than others. To begin, we can look at a graph of the 14 categories.
 
 ```{r}
 #Chart of all categories over time
@@ -251,7 +252,7 @@ ggplot(data = data %>%
 
 ```
 
-We can see from the above graphs that for most categories, there is a decent decrease in spending in 2020 and a subsequent strong increase in the last two years. Housing, Healthcare, and Personal Insurance are outliers when it comes to this trend, but that makes sense since those categories we would expect to be more inelastic than the Transportation or Food cateogries. To see which categories suffered the largest setback in 2020, I will take a look at just the percent changes from that year. 
+We can see from the above graphs that for most categories, there is a decent decrease in spending in 2020 and a subsequent strong increase in the last two years. Housing, Healthcare, and Personal Insurance are outliers when it comes to this trend, but that makes sense because we would expect those categories to be more inelastic than the Transportation or Food cateogries. To see which categories suffered the largest setback in 2020, I will focus on the percent changes from that year. 
 
 ```{r}
 #now let's create a chart just looking at 2020
@@ -269,7 +270,7 @@ data %>%
        x = "Item Code Category")
 ```
 
-This confirms the trends mentioned above with the Housing and Healthcare and Personal Insurance all increasing or staying the same while spending in about half of the remaining categories decreased substantially. If we were to remove those 3 categories and really focus on the more "discretionary" spending then we can get a better sense of how consumer's actively changed their purchasing habits in 2020.
+This confirms the trends mentioned above, with the Housing and Healthcare and Personal Insurance all increasing or staying the same, while spending in about half of the remaining categories decreased substantially. If we were to remove those three categories and focus on the more "discretionary" spending, then we can get a better sense of how consumers actively changed their purchasing habits in 2020.
 
 ```{r}
 disc_spending <- data %>%
@@ -310,11 +311,11 @@ disc_spending <- ggplot(total_spending)+
 print(disc_spending)
 ```
 
-Looking at just the discretionary spending shows that consumers spent about 8% less in these categories despite just an overall drop of less than 3% in total spending. We can also see that the discretionary spending increased more than total spending in 2021 and 2022, though it is much more closely aligned with overall spending in 2022. This does seem to indicate that some amount of the increase in spending in 2022 is likely due to increased costs of living or inflation. 
+Looking at just the discretionary spending shows that consumers spent about 8% less in these categories despite just an overall drop of less than 3% in total spending. We can also see that the discretionary spending increased more than total spending in 2021 and 2022, though it is much more closely aligned with overall spending in 2022. This seems to indicate that some amount of the increase in spending in 2022 is likely due to increased costs of living or inflation. 
 
 ### Transportation by Age
 
-In this next section I wanted to look specifically into trends within the field of transportation. Given major restrictions on travel due to the pandemic, but also an increase in the amount of remote work flexibility, this seemed like an area that would have some interesting trends. First, I just wanted to look at a quick breakdown across the age groups spending on transportation. 
+In this next section, I wanted to look specifically into trends within the field of transportation. Given major restrictions on travel due to the pandemic, but also an increase in the amount of remote work flexibility, this seemed like an area that would have some interesting trends. First, I did a quick breakdown of spending on transportation across the age groups. 
 ```{r}
 #Transportation by age group
 data %>%
@@ -360,12 +361,12 @@ trans_spending <- ggplot(data %>%
 print(trans_spending)
 ```
 
-From this graph we can see that transportation spending went significantly down for all age groups except 25 to 34 year olds in 2019 and then increased across the board in the following years for all age groups. Interestingly, there also seems to be a slight lag where the older age groups increased spending more in 2022 than 2021 and the younger age groups saw greater increase in 2021.
+From this graph, we can see that transportation spending went significantly down for all age groups except 25 to 34 year olds in 2019, and then increased across the board in the following years for all age groups. Interestingly, there also seems to be a slight lag where the older age groups increased spending more in 2022 than in 2021, and the younger age groups saw greater increase in 2021.
 
 
 ### Expenditure Restructuring
 
-Finally, perhaps the most important thing to look as is if there is significant change in how much fluctuation there is between categories. Rather than looking at the total amount increase or decrease, I wanted to see if people's consumption patterns were shifting significantly. To do that, I took the year over year difference in spending per category and summed up the absolute values. This provided me with a measure of changes in spending over time. I will be labelling this column as "restructured expenditures"
+Finally, perhaps the most important thing to examine is whether people are changing their spending habits more significantly post-pandemic than pre-pandemic. Instead of comparing total pre- and post-pandemic consumption, I wanted to see if people restructured how they spent money post-pandemic. To do that, I took the year over year difference in spending per category and summed up the absolute values. This provided me with a measure of changes in spending over time. I labeled this column "restructured expenditures."
 
 ```{r warning=FALSE}
 #warning suppressed as there was missing data for the youngest category
@@ -405,18 +406,18 @@ print(restr_spending)
 
 ```
 
-From this chart, we can see that most age groups in 2021 and 2022 are changing their spending habits at a greater rate than during the pre-pandemic years (2016 to 2019). Given that households are making larger and larger changes in their spending since the lockdown, there seems to be ample opportunity for new businesses and new products to reach new audiences as consumers seem to be less "locked in" to their past spending trends.
+From this chart, we can see that most age groups in 2021 and 2022 are changing their spending habits at a greater rate than during the pre-pandemic years (2016 to 2019). Given that households are making increasingly larger changes in their spending since the lockdown, there seems to be ample opportunity for new businesses and new products to reach new audiences as consumers seem to be less "locked in" to their past spending trends.
 
 ## Conclusion
 
 From this analysis, the main takeaways that I have found are:
 
-1. Consumer spending decreased in 2020, but has already caught back up and outpaced projected spending in 2022.
-2. Housing and Healthcare are the most inelastic expenditure categories for consumers as they were essentially not impacted by the pandemic or the following expenditure growth.
+1. Consumer spending decreased in 2020 but has already caught back up and outpaced projected spending in 2022.
+2. Housing and Healthcare are the most inelastic expenditure categories for consumers, as they were essentially not impacted by the pandemic or the following expenditure growth.
 3. Transportation spending has rebounded significantly across all age groups. 
 4. Consumers are changing their spending habits and categories more quickly than in pre-pandemic years.
 
-There are many further opportunities to dig into the consumer expenditure report by looking towards differences across other demographics and continuing to map trends over time. Additionally, the sub-categories could reveal many more actionable insights as to where spending has increased or decreased since the pandemic, as the 14 categories analyzed here are still quite broad. 
+There are many further opportunities to dig into the consumer expenditure report by looking at differences across other demographics and continuing to map trends over time. Additionally, the sub-categories could reveal many more actionable insights as to where spending has increased or decreased since the pandemic, as the 14 categories analyzed here are still quite broad. 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 #save plots
